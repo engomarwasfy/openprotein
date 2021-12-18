@@ -40,14 +40,11 @@ def predict():
     input_sequences = [
         "AAAAAAA", "AAA"]
 
-    input_sequences_embedded = [x for x in model.embed(input_sequences)]
+    input_sequences_embedded = list(model.embed(input_sequences))
 
     input_sequences_padded = torch.nn.utils.rnn.pad_sequence(input_sequences_embedded)
 
-    batch_sizes_list = []
-    for x in input_sequences:
-        batch_sizes_list.append(len(x))
-
+    batch_sizes_list = [len(x) for x in input_sequences]
     batch_sizes = torch.IntTensor(batch_sizes_list)
 
     emmissions, start_transitions, transitions, end_transitions = model(input_sequences_padded)

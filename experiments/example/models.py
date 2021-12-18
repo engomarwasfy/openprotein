@@ -50,7 +50,7 @@ class ExampleModel(openprotein.BaseModel):
     def _get_network_emissions(self, original_aa_string):
         padded_input_sequences = self.embed(original_aa_string)
         minibatch_size = len(original_aa_string)
-        batch_sizes = list([v.size(0) for v in original_aa_string])
+        batch_sizes = [v.size(0) for v in original_aa_string]
         packed_sequences = pack_padded_sequence(padded_input_sequences, batch_sizes)
 
         self.init_hidden(minibatch_size)

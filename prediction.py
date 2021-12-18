@@ -35,8 +35,10 @@ def prediction():
 
     input_sequences = [args.input_sequence]
 
-    input_sequences_encoded = list(torch.IntTensor(encode_primary_string(aa))
-                                   for aa in input_sequences)
+    input_sequences_encoded = [
+        torch.IntTensor(encode_primary_string(aa)) for aa in input_sequences
+    ]
+
 
     predicted_dihedral_angles, predicted_backbone_atoms, batch_sizes = \
         model(input_sequences_encoded)

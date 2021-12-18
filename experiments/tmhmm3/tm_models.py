@@ -195,7 +195,7 @@ class TMHMM3(openprotein.BaseModel):
                     print("Loaded profiles")
                 tensor = globals().get('profile_encoder')[aa_list]
             else:
-                tensor = list([self.encode_amino_acid(aa) for aa in aa_list])
+                tensor = [self.encode_amino_acid(aa) for aa in aa_list]
                 tensor = torch.FloatTensor(tensor)
             if self.use_gpu:
                 tensor = tensor.cuda()
@@ -238,13 +238,13 @@ class TMHMM3(openprotein.BaseModel):
         _original_label_string = training_minibatch
         minibatch_size = len(labels_list)
         labels_to_use = remapped_labels_list_crf_hmm
-        input_sequences = [x for x in self.embed(original_aa_string)]
+        input_sequences = list(self.embed(original_aa_string))
         input_sequences_padded = torch.nn.utils.rnn.pad_sequence(input_sequences)
-        batch_sizes = torch.IntTensor(list([x.size(0) for x in input_sequences]))
+        batch_sizes = torch.IntTensor([x.size(0) for x in input_sequences])
         if input_sequences_padded.is_cuda:
             batch_sizes = batch_sizes.cuda()
 
-        actual_labels = torch.nn.utils.rnn.pad_sequence([l for l in labels_to_use])
+        actual_labels = torch.nn.utils.rnn.pad_sequence(list(labels_to_use))
         emissions = self._get_network_emissions(input_sequences_padded)
 
         mask = batch_sizes_to_mask(batch_sizes)
@@ -265,7 +265,7 @@ class TMHMM3(openprotein.BaseModel):
         return loss
 
     def forward(self, input_sequences_padded) -> Tuple[torch.Tensor, torch.Tensor]:
-        if input_sequences_padded.is_cuda or input_sequences_padded.is_cuda:
+        if input_sequences_padded.is_cuda:
             input_sequences_padded = input_sequences_padded.cuda()
         emissions = self._get_network_emissions(input_sequences_padded)
 
@@ -288,9 +288,9 @@ class TMHMM3(openprotein.BaseModel):
 
             _, _, _, _, prot_type_list, prot_topology_list, \
             prot_name_list, original_aa_string, original_label_string = minibatch
-            input_sequences = [x for x in self.embed(original_aa_string)]
+            input_sequences = list(self.embed(original_aa_string))
             input_sequences_padded = torch.nn.utils.rnn.pad_sequence(input_sequences)
-            batch_sizes = torch.IntTensor(list([x.size(0) for x in input_sequences]))
+            batch_sizes = torch.IntTensor([x.size(0) for x in input_sequences])
 
             emmisions, start_transitions, transitions, end_transitions = \
                 self(input_sequences_padded)
@@ -324,12 +324,14 @@ class TMHMM3(openprotein.BaseModel):
                 predicted_topology = predicted_topologies[idx]
                 predicted_labels_for_protein = predicted_labels[idx]
 
-                if self.type_classifier is not None:
-                    if predicted_type != predicted_types_type_classifier[idx]:
-                        # we must always use the type predicted by the type predictor if available
-                        predicted_type = predicted_types_type_classifier[idx]
-                        predicted_topology = predicted_topologies_type_classifier[idx]
-                        predicted_labels_for_protein = predicted_labels_type_classifer[idx]
+                if (
+                    self.type_classifier is not None
+                    and predicted_type != predicted_types_type_classifier[idx]
+                ):
+                    # we must always use the type predicted by the type predictor if available
+                    predicted_type = predicted_types_type_classifier[idx]
+                    predicted_topology = predicted_topologies_type_classifier[idx]
+                    predicted_labels_for_protein = predicted_labels_type_classifer[idx]
 
                 prediction_topology_match = is_topologies_equal(prot_topology_list[idx],
                                                                 predicted_topology, 5)
@@ -373,22 +375,29 @@ class TMHMM3(openprotein.BaseModel):
             # optimize for topology
             validation_loss = topology_loss
 
-        data = {}
-        data['type_01loss_values'] = self.type_01loss_values
-        data['topology_01loss_values'] = self.topology_01loss_values
-        data['confusion_matrix'] = confusion_matrix.tolist()
+        data = {
+            'type_01loss_values': self.type_01loss_values,
+            'topology_01loss_values': self.topology_01loss_values,
+            'confusion_matrix': confusion_matrix.tolist(),
+        }
 
         return validation_loss, data, (
             protein_names, protein_aa_strings, protein_label_actual, protein_label_prediction)
 
 
 def post_process_prediction_data(prediction_data):
-    data = []
-    for (name, aa_string, actual, prediction) in zip(*prediction_data):
-        data.append("\n".join([">" + name,
-                               aa_string,
-                               actual,
-                               original_labels_to_fasta(prediction)]))
+    data = [
+        "\n".join(
+            [
+                ">" + name,
+                aa_string,
+                actual,
+                original_labels_to_fasta(prediction),
+            ]
+        )
+        for (name, aa_string, actual, prediction) in zip(*prediction_data)
+    ]
+
     return "\n".join(data)
 
 

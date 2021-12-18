@@ -21,13 +21,13 @@ class BaseModel(nn.Module):
         self.use_gpu = use_gpu
         self.embedding_size = embedding_size
         self.historical_rmsd_avg_values = list()
-        self.historical_drmsd_avg_values = list()
+        self.historical_drmsd_avg_values = []
 
     def get_embedding_size(self):
         return self.embedding_size
 
     def embed(self, original_aa_string):
-        max_len = max([s.size(0) for s in original_aa_string])
+        max_len = max(s.size(0) for s in original_aa_string)
         seqs = []
         for tensor in original_aa_string:
             padding_to_add = torch.zeros(max_len-tensor.size(0)).int()
@@ -73,9 +73,7 @@ class BaseModel(nn.Module):
         if self.use_gpu:
             emissions_actual = emissions_actual.cuda()
             # drmsd_avg = drmsd_avg.cuda()
-        angular_loss = calc_angular_difference(emissions, emissions_actual)
-
-        return angular_loss  # + drmsd_avg
+        return calc_angular_difference(emissions, emissions_actual)
 
     def forward(self, original_aa_string):
         return self._get_network_emissions(original_aa_string)
@@ -147,13 +145,12 @@ class BaseModel(nn.Module):
         write_to_pdb(get_structure_from_angles(prim, angles), "test")
         write_to_pdb(get_structure_from_angles(prim, angles_pred), "test_pred")
 
-        data = {}
-        data["pdb_data_pred"] = open("output/protein_test_pred.pdb", "r").read()
+        data = {'pdb_data_pred': open("output/protein_test_pred.pdb", "r").read()}
         data["pdb_data_true"] = open("output/protein_test.pdb", "r").read()
-        data["phi_actual"] = list([math.degrees(float(v)) for v in angles[1:, 1]])
-        data["psi_actual"] = list([math.degrees(float(v)) for v in angles[:-1, 2]])
-        data["phi_predicted"] = list([math.degrees(float(v)) for v in angles_pred[1:, 1]])
-        data["psi_predicted"] = list([math.degrees(float(v)) for v in angles_pred[:-1, 2]])
+        data["phi_actual"] = [math.degrees(float(v)) for v in angles[1:, 1]]
+        data["psi_actual"] = [math.degrees(float(v)) for v in angles[:-1, 2]]
+        data["phi_predicted"] = [math.degrees(float(v)) for v in angles_pred[1:, 1]]
+        data["psi_predicted"] = [math.degrees(float(v)) for v in angles_pred[:-1, 2]]
         data["rmsd_avg"] = self.historical_rmsd_avg_values
         data["drmsd_avg"] = self.historical_drmsd_avg_values
 

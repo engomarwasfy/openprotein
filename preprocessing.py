@@ -59,29 +59,30 @@ def read_protein_from_file(file_pointer):
         next_line = file_pointer.readline()
         if next_line == '[ID]\n':
             id_ = file_pointer.readline()[:-1]
-            dict_.update({'id': id_})
+            dict_['id'] = id_
         elif next_line == '[PRIMARY]\n':
             primary = encode_primary_string(file_pointer.readline()[:-1])
-            dict_.update({'primary': primary})
+            dict_['primary'] = primary
         elif next_line == '[EVOLUTIONARY]\n':
-            evolutionary = []
-            for _residue in range(21):
-                evolutionary.append(\
-                    [float(step) for step in file_pointer.readline().split()])
-            dict_.update({'evolutionary': evolutionary})
+            evolutionary = [
+                [float(step) for step in file_pointer.readline().split()]
+                for _ in range(21)
+            ]
+
+            dict_['evolutionary'] = evolutionary
         elif next_line == '[SECONDARY]\n':
-            secondary = list([_dssp_dict[dssp] for dssp in file_pointer.readline()[:-1]])
-            dict_.update({'secondary': secondary})
+            secondary = [_dssp_dict[dssp] for dssp in file_pointer.readline()[:-1]]
+            dict_['secondary'] = secondary
         elif next_line == '[TERTIARY]\n':
-            tertiary = []
-            # 3 dimension
-            for _axis in range(3):
-                tertiary.append(\
-                [float(coord) for coord in file_pointer.readline().split()])
-            dict_.update({'tertiary': tertiary})
+            tertiary = [
+                [float(coord) for coord in file_pointer.readline().split()]
+                for _ in range(3)
+            ]
+
+            dict_['tertiary'] = tertiary
         elif next_line == '[MASK]\n':
-            mask = list([_mask_dict[aa] for aa in file_pointer.readline()[:-1]])
-            dict_.update({'mask': mask})
+            mask = [_mask_dict[aa] for aa in file_pointer.readline()[:-1]]
+            dict_['mask'] = mask
             mask_str = ''.join(map(str, mask))
 
             write_out("-------------")
@@ -108,9 +109,9 @@ def read_protein_from_file(file_pointer):
                 # split lists in dict to have the seq with coords
                 # separated from what should not be analysed
                 if 'secondary' in dict_:
-                    dict_.update({'secondary': secondary[sequence_start:sequence_end]})
-                dict_.update({'primary': primary[sequence_start:sequence_end]})
-                dict_.update({'mask': mask[sequence_start:sequence_end]})
+                    dict_['secondary'] = secondary[sequence_start:sequence_end]
+                dict_['primary'] = primary[sequence_start:sequence_end]
+                dict_['mask'] = mask[sequence_start:sequence_end]
                 for elem in range(len(dict_['evolutionary'])):
                     dict_['evolutionary'][elem] = \
                         dict_['evolutionary'][elem][sequence_start:sequence_end]
@@ -156,7 +157,7 @@ def process_file(input_file, output_file, use_gpu):
         if missing_aa is True:
             continue
         if current_buffer_allocation >= current_buffer_size:
-            current_buffer_size = current_buffer_size + 1
+            current_buffer_size += 1
             dset1.resize((current_buffer_size, MAX_SEQUENCE_LENGTH))
             dset2.resize((current_buffer_size, MAX_SEQUENCE_LENGTH, 9))
             dset3.resize((current_buffer_size, MAX_SEQUENCE_LENGTH))

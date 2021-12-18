@@ -51,9 +51,7 @@ class H5PytorchDataset(torch.utils.data.Dataset):
 
 
 def merge_samples_to_minibatch(samples):
-    samples_list = []
-    for sample in samples:
-        samples_list.append(sample)
+    samples_list = list(samples)
     # sort according to length of aa sequence
     samples_list.sort(key=lambda x: len(x[0]), reverse=True)
     return zip(*samples_list)
@@ -89,9 +87,8 @@ def write_model_to_disk(model):
 
 def write_prediction_data_to_disk(prediction_data):
     filepath = "output/predictions/" + globals().get("experiment_id") + ".txt"
-    output_file = open(filepath, 'w')
-    output_file.write(prediction_data)
-    output_file.close()
+    with open(filepath, 'w') as output_file:
+        output_file.write(prediction_data)
 
 
 def draw_plot(fig, plt, validation_dataset_size, sample_num, train_loss_values,
@@ -172,11 +169,10 @@ def calculate_dihedral_angles(atomic_coords, use_gpu):
 
 
 
-    angles = torch.cat((zero_tensor,
+    return torch.cat((zero_tensor,
                         zero_tensor,
                         compute_dihedral_list(atomic_coords),
                         zero_tensor)).view(-1, 3)
-    return angles
 
 def compute_cross(tensor_a, tensor_b, dim):
 
@@ -234,18 +230,17 @@ def compute_dihedral_list(atomic_coords):
 
 
 def write_pdb(file_name, aa_sequence, residue_coords):
-    residue_names = list([protein_letters_1to3[l].upper() for l in aa_sequence])
+    residue_names = [protein_letters_1to3[l].upper() for l in aa_sequence]
     num_atoms = len(residue_coords)
     backbone_names = num_atoms * ["N", "CA", "C"]
 
     assert num_atoms == len(aa_sequence) * 3
-    file = open(file_name, 'w')
-
-    for i in range(num_atoms):
-        atom_coordinates = list([str(l) for l in np.round(residue_coords[i], 3)])
-        residue_position = int(i / 3)
-        atom_id = str(i + 1)
-        file.write(f"""\
+    with open(file_name, 'w') as file:
+        for i in range(num_atoms):
+            atom_coordinates = [str(l) for l in np.round(residue_coords[i], 3)]
+            residue_position = int(i / 3)
+            atom_id = str(i + 1)
+            file.write(f"""\
 ATOM  \
 {atom_id.rjust(5)} \
 {backbone_names[i].rjust(4)} \
@@ -256,7 +251,6 @@ A\
 {atom_coordinates[1].rjust(8)}\
 {atom_coordinates[2].rjust(8)}\
 \n""")
-    file.close()
 
 def get_structure_from_angles(aa_list_encoded, angles):
     aa_list = protein_id_to_str(aa_list_encoded)
@@ -264,11 +258,12 @@ def get_structure_from_angles(aa_list_encoded, angles):
     phi_list = angles[1:, 1]
     psi_list = angles[:-1, 2]
     assert len(aa_list) == len(phi_list) + 1 == len(psi_list) + 1 == len(omega_list) + 1
-    structure = PeptideBuilder.make_structure(aa_list,
-                                              list(map(lambda x: math.degrees(x), phi_list)),
-                                              list(map(lambda x: math.degrees(x), psi_list)),
-                                              list(map(lambda x: math.degrees(x), omega_list)))
-    return structure
+    return PeptideBuilder.make_structure(
+        aa_list,
+        list(map(lambda x: math.degrees(x), phi_list)),
+        list(map(lambda x: math.degrees(x), psi_list)),
+        list(map(lambda x: math.degrees(x), omega_list)),
+    )
 
 
 def write_to_pdb(structure, prot_id):
@@ -321,11 +316,15 @@ def calc_rmsd(chain_a, chain_b):
     # extract the singular values
     _, S, _ = np.linalg.svd(R)
     # compute RMSD using the formular
-    E0 = sum(list(np.linalg.norm(x) ** 2 for x in X.transpose())
-             + list(np.linalg.norm(x) ** 2 for x in Y.transpose()))
+    E0 = sum(
+        (
+            [np.linalg.norm(x) ** 2 for x in X.transpose()]
+            + [np.linalg.norm(x) ** 2 for x in Y.transpose()]
+        )
+    )
+
     TraceS = sum(S)
-    RMSD = np.sqrt((1 / len(X.transpose())) * (E0 - 2 * TraceS))
-    return RMSD
+    return np.sqrt((1 / len(X.transpose())) * (E0 - 2 * TraceS))
 
 
 def calc_angular_difference(values_1, values_2):
@@ -345,9 +344,10 @@ def calc_angular_difference(values_1, values_2):
 
 
 def structures_to_backbone_atoms_padded(structures):
-    backbone_atoms_list = []
-    for structure in structures:
-        backbone_atoms_list.append(structure_to_backbone_atoms(structure))
+    backbone_atoms_list = [
+        structure_to_backbone_atoms(structure) for structure in structures
+    ]
+
     backbone_atoms_padded, batch_sizes_backbone = torch.nn.utils.rnn.pad_packed_sequence(
         torch.nn.utils.rnn.pack_sequence(backbone_atoms_list))
     return backbone_atoms_padded, batch_sizes_backbone
@@ -374,12 +374,16 @@ def get_backbone_positions_from_angles(angular_emissions, batch_sizes, use_gpu):
 
 
 def calc_avg_drmsd_over_minibatch(backbone_atoms_padded, actual_coords_padded, batch_sizes):
-    backbone_atoms_list = list(
-        [backbone_atoms_padded[:batch_sizes[i], i] for i in range(int(backbone_atoms_padded
-                                                                      .size(1)))])
-    actual_coords_list = list(
-        [actual_coords_padded[:batch_sizes[i], i] for i in range(int(actual_coords_padded
-                                                                     .size(1)))])
+    backbone_atoms_list = [
+        backbone_atoms_padded[: batch_sizes[i], i]
+        for i in range(int(backbone_atoms_padded.size(1)))
+    ]
+
+    actual_coords_list = [
+        actual_coords_padded[: batch_sizes[i], i]
+        for i in range(int(actual_coords_padded.size(1)))
+    ]
+
     drmsd_avg = 0
     for idx, backbone_atoms in enumerate(backbone_atoms_list):
         actual_coords = actual_coords_list[idx].transpose(0, 1).contiguous().view(-1, 3)
@@ -389,7 +393,7 @@ def calc_avg_drmsd_over_minibatch(backbone_atoms_padded, actual_coords_padded, b
 
 
 def encode_primary_string(primary):
-    return list([AA_ID_DICT[aa] for aa in primary])
+    return [AA_ID_DICT[aa] for aa in primary]
 
 
 def initial_pos_from_aa_string(batch_aa_string, use_gpu):
@@ -434,8 +438,7 @@ def pass_messages(aa_features, message_transformation, use_gpu):
         .reshape(-1).gather(0, eye_inverted_location).view(-1, 2, feature_size)
 
     transformed = message_transformation(aa_msg_pairs).view(aa_count, aa_count - 1, -1)
-    transformed_sum = transformed.sum(dim=1)  # aa_count x output message size
-    return transformed_sum
+    return transformed.sum(dim=1)
 
 
 def load_model_from_disk(path, force_cpu=True):
@@ -485,10 +488,9 @@ def dihedral_to_point(dihedral, use_gpu, bond_lengths=BOND_LENGTHS,
 
     point = torch.stack([point_x, point_y, point_z])
     point_perm = point.permute(1, 3, 2, 0)
-    point_final = point_perm.contiguous().view(num_steps * NUM_DIHEDRALS,
+    return point_perm.contiguous().view(num_steps * NUM_DIHEDRALS,
                                                batch_size,
                                                NUM_DIMENSIONS)
-    return point_final
 
 PNERF_INIT_MATRIX = [torch.tensor([-torch.sqrt(torch.tensor([1.0 / 2.0])),
                                    torch.sqrt(torch.tensor([3.0 / 2.0])), 0]),
@@ -575,9 +577,8 @@ def point_to_coordinate(points, use_gpu, num_fragments):
             s = point.shape + (3,)
             m = torch.stack([bc, compute_cross(n, bc, dim=1), n]).permute(1, 2, 0)
             m = m.repeat(s[0], 1, 1).view(s)
-        coord = torch.squeeze(torch.matmul(m, point.unsqueeze(3)),
+        return torch.squeeze(torch.matmul(m, point.unsqueeze(3)),
                               dim=3) + prev_three_coords.c
-        return coord
 
     # Loop over FRAG_SIZE in NUM_FRAGS parallel fragments, sequentially
     # generating the coordinates for each fragment across all batches

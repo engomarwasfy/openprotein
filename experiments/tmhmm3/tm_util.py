@@ -54,11 +54,11 @@ class TMDataset(Dataset):
         prot_name_list = []
         # sort according to length of aa sequence
         dataset.sort(key=lambda x: len(x[1]), reverse=True)
+        aa_tmp_list_tensor = []
         for prot_name, prot_aa_list, prot_original_label_list, type_id, _cluster_id in dataset:
             prot_name_list.append(prot_name)
             prot_aa_list_all.append(prot_aa_list)
             prot_labels_list_all.append(prot_original_label_list)
-            aa_tmp_list_tensor = []
             labels = None
             remapped_labels_crf_hmm = None
             last_non_membrane_position = None
@@ -92,37 +92,36 @@ class TMDataset(Dataset):
                 topology = label_list_to_topology(labels)
                 # given topology, now calculate remapped labels
                 for idx, (pos, l) in enumerate(topology):
-                    if l == 0:  # I -> O
+                    if l == 0:
                         membrane_length = topology[idx + 1][0] - pos
                         mm_beginning = 4
                         for i in range(mm_beginning):
                             remapped_labels_crf_hmm.append(5 + i)
                         for i in range(40 - (membrane_length - mm_beginning), 40):
                             remapped_labels_crf_hmm.append(5 + i)
-                    elif l == 1:  # O -> I
+                    elif l == 1:
                         membrane_length = topology[idx + 1][0] - pos
                         mm_beginning = 4
                         for i in range(mm_beginning):
                             remapped_labels_crf_hmm.append(45 + i)
                         for i in range(40 - (membrane_length - mm_beginning), 40):
                             remapped_labels_crf_hmm.append(45 + i)
-                    elif l == 2:  # S
+                    elif l == 2:
                         signal_length = topology[idx + 1][0] - pos
                         remapped_labels_crf_hmm.append(2)
                         for i in range(signal_length - 1):
                             remapped_labels_crf_hmm.append(152 - ((signal_length - 1) - i))
                             if remapped_labels_crf_hmm[-1] == 85:
                                 print("Too long signal peptide region found", prot_name)
+                    elif idx == (len(topology) - 1):
+                        for _ in range(len(labels) - pos):
+                            remapped_labels_crf_hmm.append(l)
                     else:
-                        if idx == (len(topology) - 1):
-                            for i in range(len(labels) - pos):
-                                remapped_labels_crf_hmm.append(l)
-                        else:
-                            for i in range(topology[idx + 1][0] - pos):
-                                remapped_labels_crf_hmm.append(l)
+                        for _ in range(topology[idx + 1][0] - pos):
+                            remapped_labels_crf_hmm.append(l)
                 remapped_labels_crf_hmm = torch.LongTensor(remapped_labels_crf_hmm)
 
-                remapped_labels_crf_marg = list([l + (type_id * 5) for l in labels])
+                remapped_labels_crf_marg = [l + (type_id * 5) for l in labels]
                 remapped_labels_crf_marg = torch.LongTensor(remapped_labels_crf_marg)
 
                 # check that protein was properly parsed
@@ -161,9 +160,7 @@ class TMDataset(Dataset):
 
 
 def merge_samples_to_minibatch(samples):
-    samples_list = []
-    for sample in samples:
-        samples_list.append(sample)
+    samples_list = list(samples)
     # sort according to length of aa sequence
     samples_list.sort(key=lambda x: len(x[7]), reverse=True)
     aa_list, labels_list, remapped_labels_list_crf_hmm, \
@@ -192,12 +189,7 @@ class RandomBatchClassBalancedSequentialSampler(torch.utils.data.sampler.Sampler
         self.dataset = dataset
 
     def __iter__(self):
-        data_class_map = {}
-        data_class_map[0] = []
-        data_class_map[1] = []
-        data_class_map[2] = []
-        data_class_map[3] = []
-
+        data_class_map = {0: [], 1: [], 2: [], 3: []}
         for idx in self.sampler:
             data_class_map[self.dataset[idx][4]].append(idx)
 
@@ -215,7 +207,7 @@ class RandomBatchClassBalancedSequentialSampler(torch.utils.data.sampler.Sampler
         batches = []
         for _ in range(batch_num):
             batch = []
-            for _class_id, data_rows in data_class_map.items():
+            for data_rows in data_class_map.values():
                 int_offset = int(batch_relative_offset * len(data_rows))
                 batch.extend(sample_at_index(data_rows, int_offset, num_each_class))
             batch_relative_offset += 1.0 / float(batch_num)
@@ -228,10 +220,7 @@ class RandomBatchClassBalancedSequentialSampler(torch.utils.data.sampler.Sampler
             yield batch
 
     def __len__(self):
-        length = 0
-        for _ in self.sampler:
-            length += 1
-        return length
+        return sum(1 for _ in self.sampler)
 
 
 class RandomBatchSequentialSampler(torch.utils.data.sampler.Sampler):
@@ -241,10 +230,7 @@ class RandomBatchSequentialSampler(torch.utils.data.sampler.Sampler):
         self.batch_size = batch_size
 
     def __iter__(self):
-        data = []
-        for idx in self.sampler:
-            data.append(idx)
-
+        data = list(self.sampler)
         batch_num = int(len(data) / self.batch_size)
         if len(data) % self.batch_size != 0:
             batch_num += 1
@@ -262,10 +248,7 @@ class RandomBatchSequentialSampler(torch.utils.data.sampler.Sampler):
             batch = []
 
     def __len__(self):
-        length = 0
-        for _ in self.sampler:
-            length += 1
-        return length
+        return sum(1 for _ in self.sampler)
 
 
 def sample_at_index(rows, offset, sample_num):
@@ -354,25 +337,22 @@ def batch_sizes_to_mask(batch_sizes: torch.Tensor) -> torch.Tensor:
     arange = torch.arange(batch_sizes[0], dtype=torch.int32)
     if batch_sizes.is_cuda:
         arange = arange.cuda()
-    res = (arange.expand(batch_sizes.size(0), batch_sizes[0])
+    return (arange.expand(batch_sizes.size(0), batch_sizes[0])
            < batch_sizes.unsqueeze(1)).transpose(0, 1)
-    return res
 
 def original_labels_to_fasta(label_list):
     sequence = ""
     for label in label_list:
-        if label == 0:
-            sequence = sequence + "M"
-        if label == 1:
-            sequence = sequence + "M"
-        if label == 2:
-            sequence = sequence + "S"
-        if label == 3:
-            sequence = sequence + "I"
-        if label == 4:
-            sequence = sequence + "O"
-        if label == 5:
-            sequence = sequence + "-"
+        if label in [0, 1]:
+            sequence += "M"
+        elif label == 2:
+            sequence += "S"
+        elif label == 3:
+            sequence += "I"
+        elif label == 4:
+            sequence += "O"
+        elif label == 5:
+            sequence += "-"
     return sequence
 
 
@@ -457,13 +437,12 @@ def parse_3line_format(lines):
                     else:
                         type_id = 2
                         assert type_string == "SP"
+                elif prot_topology_list.__contains__("M"):
+                    type_id = 0
+                    assert type_string == "TM"
                 else:
-                    if prot_topology_list.__contains__("M"):
-                        type_id = 0
-                        assert type_string == "TM"
-                    else:
-                        type_id = 3
-                        assert type_string == "GLOBULAR"
+                    type_id = 3
+                    assert type_string == "GLOBULAR"
             else:
                 type_id = None
                 prot_topology_list = None
@@ -474,7 +453,7 @@ def parse_3line_format(lines):
 
 
 def parse_datafile_from_disk(file):
-    lines = list([line.strip() for line in open(file)])
+    lines = [line.strip() for line in open(file)]
     return parse_3line_format(lines)
 
 
@@ -563,13 +542,14 @@ def decode(emissions, batch_sizes, start_transitions, transitions, end_transitio
         labels_predicted.append(val)
 
 
-    predicted_labels = []
-    for l in labels_predicted:
-        predicted_labels.append(remapped_labels_hmm_to_orginal_labels(l))
+    predicted_labels = [
+        remapped_labels_hmm_to_orginal_labels(l) for l in labels_predicted
+    ]
 
-    predicted_types_list = []
-    for p_label in predicted_labels:
-        predicted_types_list.append(get_predicted_type_from_labels(p_label))
+    predicted_types_list = [
+        get_predicted_type_from_labels(p_label) for p_label in predicted_labels
+    ]
+
     predicted_types = torch.cat(predicted_types_list)
 
 
@@ -599,13 +579,14 @@ def decode_numpy(emissions, batch_sizes, start_transitions, transitions, end_tra
         labels_predicted.append(val)
 
 
-    predicted_labels = []
-    for l in labels_predicted:
-        predicted_labels.append(remapped_labels_hmm_to_orginal_labels(l))
+    predicted_labels = [
+        remapped_labels_hmm_to_orginal_labels(l) for l in labels_predicted
+    ]
 
-    predicted_types_list = []
-    for p_label in predicted_labels:
-        predicted_types_list.append(get_predicted_type_from_labels(p_label))
+    predicted_types_list = [
+        get_predicted_type_from_labels(p_label) for p_label in predicted_labels
+    ]
+
     predicted_types = np.array(predicted_types_list).squeeze(axis=1)
 
     # if all O's, change to all I's (by convention)
@@ -648,9 +629,7 @@ def numpy_viterbi_decode(emissions,
     # Viterbi algorithm recursive case: we compute the score of the best tag sequence
     # for every possible next tag
 
-    l = []
-    for i in batch_sizes:
-        l.append(np.array([1] * i + [0] * (seq_length - i)))
+    l = [np.array([1] * i + [0] * (seq_length - i)) for i in batch_sizes]
     mask = np.array(l).T
 
 

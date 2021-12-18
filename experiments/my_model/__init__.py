@@ -60,7 +60,7 @@ class MyModel(openprotein.BaseModel):
         self.input_to_angles = nn.Linear(embedding_size, self.number_angles)
 
     def _get_network_emissions(self, original_aa_string):
-        batch_sizes = list([a.size() for a in original_aa_string])
+        batch_sizes = [a.size() for a in original_aa_string]
 
         embedded_input = self.embed(original_aa_string)
         emissions_padded = self.input_to_angles(embedded_input)

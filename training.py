@@ -25,8 +25,8 @@ def train_model(data_set_identifier, model, train_loader, validation_loader,
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     sample_num = list()
-    train_loss_values = list()
-    validation_loss_values = list()
+    train_loss_values = []
+    validation_loss_values = []
 
     best_model_loss = 1e20
     best_model_minibatch_time = None

@@ -50,10 +50,7 @@ def run_experiment(parser, use_gpu):
 
     result_matrices = np.zeros((5, 5), dtype=np.int64)
 
-    if args.profile_path != "":
-        embedding = "PROFILE"
-    else:
-        embedding = "BLOSUM62"
+    embedding = "PROFILE" if args.profile_path != "" else "BLOSUM62"
     use_marg_prob = False
     all_prediction_data = []
 
@@ -63,9 +60,9 @@ def run_experiment(parser, use_gpu):
                                                            partition_rotation=cv_partition)
 
         # topology data set
-        train_set_topology = list(filter(lambda x: x[3] == 0 or x[3] == 1, train_set))
-        val_set_topology = list(filter(lambda x: x[3] == 0 or x[3] == 1, val_set))
-        test_set_topology = list(filter(lambda x: x[3] == 0 or x[3] == 1, test_set))
+        train_set_topology = list(filter(lambda x: x[3] in [0, 1], train_set))
+        val_set_topology = list(filter(lambda x: x[3] in [0, 1], val_set))
+        test_set_topology = list(filter(lambda x: x[3] in [0, 1], test_set))
 
         if not args.silent:
             print("Loaded ",
@@ -78,10 +75,10 @@ def run_experiment(parser, use_gpu):
             hashlib.sha256(args.input_data.encode()).hexdigest())[:8] + "_cv" \
                              + str(cv_partition) + ".pickle"
         if not os.path.isfile(pre_processed_path):
-            input_data_processed = list([TMDataset.from_disk(set, use_gpu) for set in
-                                         [train_set, val_set, test_set,
-                                          train_set_topology, val_set_topology,
-                                          test_set_topology]])
+            input_data_processed = [TMDataset.from_disk(set, use_gpu) for set in
+                                                     [train_set, val_set, test_set,
+                                                      train_set_topology, val_set_topology,
+                                                      test_set_topology]]
             pickle.dump(input_data_processed, open(pre_processed_path, "wb"))
         input_data_processed = pickle.load(open(pre_processed_path, "rb"))
         train_preprocessed_set = input_data_processed[0]
